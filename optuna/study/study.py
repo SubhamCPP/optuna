@@ -1003,6 +1003,48 @@ class Study:
         for trial in trials:
             self.add_trial(trial)
 
+    @experimental_func("4.0.0")
+    def delete_trial(self, trial_id: int) -> None:
+        """Delete a trial from the study.
+
+        Args:
+            trial_id:
+                The ID of the trial to delete.
+
+        Raises:
+            KeyError:
+                If the trial with the specified ID does not exist.
+            ValueError:
+                If the trial does not belong to this study.
+            RuntimeError:
+                If the trial is in a state that cannot be deleted (e.g., RUNNING).
+        """
+        # Fetch the trial from storage
+        trial = self._storage.get_trial(trial_id)
+
+        # Check if the trial belongs to this study
+        if trial.study_id != self._study_id:
+            raise ValueError(f"Trial {trial_id} does not belong to this study.")
+
+        # Optional: Disallow deletion of RUNNING trials
+        if trial.state == TrialState.RUNNING:
+            raise RuntimeError(f"Cannot delete a trial in state {trial.state}.")
+
+        # Delete the trial from storage
+        self._storage.delete_trial(trial_id)
+
+        # Update the internal trials cache
+        if hasattr(self._thread_local, 'cached_all_trials') and \
+           self._thread_local.cached_all_trials is not None:
+            self._thread_local.cached_all_trials = [
+                t for t in self._thread_local.cached_all_trials if t._trial_id != trial_id
+            ]
+
+        # Invalidate caches if any (e.g., best trial)
+        self._cached_best_trial_id = None
+        self._cached_trials = None
+        self._thread_local.cached_all_trials = None
+
     @experimental_func("3.2.0")
     def set_metric_names(self, metric_names: list[str]) -> None:
         """Set metric names.

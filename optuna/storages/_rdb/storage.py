@@ -936,6 +936,22 @@ class RDBStorage(BaseStorage, BaseHeartbeat):
                 trial_id = models.TrialModel.find_min_value_trial_id(study_id, 0, session)
 
         return self.get_trial(trial_id)
+    
+    def delete_trial(self, trial_id: int) -> None:
+        with _create_scoped_session(self.scoped_session, True) as session:
+            trial = models.TrialModel.find_or_raise_by_id(trial_id, session)
+            self.check_trial_is_updatable(trial_id, trial.state)
+
+            # Delete related attributes
+            session.query(models.TrialUserAttributeModel).filter_by(trial_id=trial_id).delete()
+            session.query(models.TrialSystemAttributeModel).filter_by(trial_id=trial_id).delete()
+            session.query(models.TrialParamModel).filter_by(trial_id=trial_id).delete()
+            session.query(models.TrialValueModel).filter_by(trial_id=trial_id).delete()
+            session.query(models.TrialIntermediateValueModel).filter_by(trial_id=trial_id).delete()
+            session.query(models.TrialHeartbeatModel).filter_by(trial_id=trial_id).delete()
+
+            # Delete the trial itself
+            session.delete(trial)
 
     @staticmethod
     def _set_default_engine_kwargs_for_mysql(url: str, engine_kwargs: Dict[str, Any]) -> None:

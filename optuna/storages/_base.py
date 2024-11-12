@@ -440,6 +440,22 @@ class BaseStorage(abc.ABC):
                 If the trial is already finished.
         """
         raise NotImplementedError
+    
+    @abc.abstractmethod
+    def delete_trial(self, trial_id: int) -> None:
+        """Delete a trial.
+
+        Args:
+            trial_id:
+                ID of the trial.
+
+        Raises:
+            KeyError:
+                If no trial with the matching ``trial_id`` exists.
+            RuntimeError:
+                If the trial is in a state that cannot be deleted (e.g., RUNNING).
+        """
+        raise NotImplementedError
 
     # Basic trial access
 

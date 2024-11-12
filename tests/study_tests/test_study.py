@@ -1683,3 +1683,46 @@ def test_get_metric_names() -> None:
     assert study.metric_names == ["v0"]
     study.set_metric_names(["v1"])
     assert study.metric_names == ["v1"]
+
+def test_study_delete_trial_success() -> None:
+    study = create_study()
+    trial = study.ask()
+    study.tell(trial, 1.0)
+    # Delete the trial
+    study.delete_trial(trial.number)
+    # Verify that the trial is deleted
+    assert all(t.number != trial.number for t in study.trials)
+
+
+def test_study_delete_trial_non_existent_trial() -> None:
+    study = create_study()
+    # Attempt to delete a trial number that does not exist
+    non_existent_trial_number = 99999  # Assuming this number does not exist
+    with pytest.raises(KeyError):
+        study.delete_trial(non_existent_trial_number)
+
+
+def test_study_delete_trial_non_deletable_state() -> None:
+    study = create_study()
+    trial = study.ask()
+    # The trial is in RUNNING state (not yet told)
+    with pytest.raises(RuntimeError):
+        study.delete_trial(trial.number)
+
+
+def test_study_delete_trial_updates_study_correctly() -> None:
+    study = create_study()
+    trials = []
+    for _ in range(3):
+        trial = study.ask()
+        study.tell(trial, 1.0)
+        trials.append(trial)
+    # Delete the second trial
+    trial_to_delete = trials[1]
+    study.delete_trial(trial_to_delete.number)
+    # Verify the deleted trial is not in the study
+    remaining_trial_numbers = [t.number for t in study.trials]
+    assert trial_to_delete.number not in remaining_trial_numbers
+    # Verify other trials are unaffected
+    assert trials[0].number in remaining_trial_numbers
+    assert trials[2].number in remaining_trial_numbers

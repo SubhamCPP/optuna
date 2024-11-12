@@ -1166,3 +1166,62 @@ def test_check_trial_is_updatable(storage_mode: str) -> None:
 
         with pytest.raises(RuntimeError):
             storage.check_trial_is_updatable(trial_id, TrialState.COMPLETE)
+
+
+@pytest.mark.parametrize("storage_mode", STORAGE_MODES)
+def test_delete_trial_success(storage_mode: str) -> None:
+    with StorageSupplier(storage_mode) as storage:
+        # Create a study and a trial
+        study_id = storage.create_new_study(directions=[StudyDirection.MINIMIZE])
+        trial_id = storage.create_new_trial(study_id)
+        # Set the trial to a deletable state
+        storage.set_trial_state_values(trial_id, state=TrialState.COMPLETE, values=(0.0,))
+        # Delete the trial
+        storage.delete_trial(trial_id)
+        # Verify that the trial is deleted
+        with pytest.raises(KeyError):
+            storage.get_trial(trial_id)
+        # Verify that the trial is no longer in the list of all trials
+        trials = storage.get_all_trials(study_id)
+        assert all(t._trial_id != trial_id for t in trials)
+
+
+@pytest.mark.parametrize("storage_mode", STORAGE_MODES)
+def test_delete_trial_non_existent_trial(storage_mode: str) -> None:
+    with StorageSupplier(storage_mode) as storage:
+        # Attempt to delete a trial that does not exist
+        non_existent_trial_id = 99999  # Assuming this ID does not exist
+        with pytest.raises(KeyError):
+            storage.delete_trial(non_existent_trial_id)
+
+
+@pytest.mark.parametrize("storage_mode", STORAGE_MODES)
+def test_delete_trial_non_deletable_state(storage_mode: str) -> None:
+    with StorageSupplier(storage_mode) as storage:
+        # Create a study and a trial
+        study_id = storage.create_new_study(directions=[StudyDirection.MINIMIZE])
+        trial_id = storage.create_new_trial(study_id)
+        # The trial is in RUNNING state (non-deletable)
+        with pytest.raises(RuntimeError):
+            storage.delete_trial(trial_id)
+
+
+@pytest.mark.parametrize("storage_mode", STORAGE_MODES)
+def test_delete_trial_updates_storage_correctly(storage_mode: str) -> None:
+    with StorageSupplier(storage_mode) as storage:
+        # Create a study and multiple trials
+        study_id = storage.create_new_study(directions=[StudyDirection.MINIMIZE])
+        trial_ids = [storage.create_new_trial(study_id) for _ in range(3)]
+        # Set trials to COMPLETE state
+        for trial_id in trial_ids:
+            storage.set_trial_state_values(trial_id, state=TrialState.COMPLETE, values=(0.0,))
+        # Delete the second trial
+        trial_to_delete = trial_ids[1]
+        storage.delete_trial(trial_to_delete)
+        # Verify the deleted trial is not in the storage
+        trials = storage.get_all_trials(study_id)
+        remaining_trial_ids = [t._trial_id for t in trials]
+        assert trial_to_delete not in remaining_trial_ids
+        # Verify other trials are unaffected
+        assert trial_ids[0] in remaining_trial_ids
+        assert trial_ids[2] in remaining_trial_ids

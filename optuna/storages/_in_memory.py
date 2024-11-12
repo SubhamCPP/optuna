@@ -387,6 +387,44 @@ class InMemoryStorage(BaseStorage):
 
         return trials
 
+    def delete_trial(self, trial_id: int) -> None:
+        with self._lock:
+            self._check_trial_id(trial_id)
+            study_id, trial_number = self._trial_id_to_study_id_and_number.pop(trial_id)
+
+            trial = self._studies[study_id].trials[trial_number]
+            self.check_trial_is_updatable(trial_id, trial.state)
+
+            # Remove the trial from the list of trials in the study
+            del self._studies[study_id].trials[trial_number]
+
+            # Update trial numbers and mappings for subsequent trials
+            for idx in range(trial_number, len(self._studies[study_id].trials)):
+                t = self._studies[study_id].trials[idx]
+                t.number = idx
+                self._trial_id_to_study_id_and_number[t._trial_id] = (study_id, idx)
+
+            # If the deleted trial was the best trial, update best_trial_id
+            if self._studies[study_id].best_trial_id == trial_id:
+                self._recalculate_best_trial(study_id)
+
+    def _recalculate_best_trial(self, study_id: int) -> None:
+        best_trial_id = None
+        best_value = None
+        direction = self.get_study_directions(study_id)[0]
+        for trial in self._studies[study_id].trials:
+            if trial.state != TrialState.COMPLETE or trial.value is None:
+                continue
+            if best_value is None:
+                best_value = trial.value
+                best_trial_id = trial._trial_id
+            else:
+                if (direction == StudyDirection.MINIMIZE and trial.value < best_value) or \
+                   (direction == StudyDirection.MAXIMIZE and trial.value > best_value):
+                    best_value = trial.value
+                    best_trial_id = trial._trial_id
+        self._studies[study_id].best_trial_id = best_trial_id
+
     def _check_study_id(self, study_id: int) -> None:
         if study_id not in self._studies:
             raise KeyError("No study with study_id {} exists.".format(study_id))
